@@ -1,65 +1,46 @@
-use std::net::{TcpListener, TcpStream};
+use std::borrow::Cow;
+use std::net::{IpAddr, TcpListener, TcpStream};
 use std::io::{Read, Write};
-use std::fs;
+use std::{clone, fs};
 
-fn handle_client(mut stream: TcpStream) {
-    let mut buf = [0; 512];
-    stream.read(&mut buf).unwrap();
+use futures::{FutureExt, StreamExt};
 
-    let request = String::from_utf8_lossy(&buf[..]);
-    println!("Request recived. Content: {}", request);
-
-    let response = match &request[..2] {
-        "1" => throw_text_file("/home/hal9000/GOPHER-BAR/docs/doc1.txt"),
-        "0" => throw_directory("."), // throws current dir
-        _ => throw_error("ERROR: Invalid request!"),
-    };
-
-    stream.write_all(response.as_bytes()).unwrap();
+#[derive(Debug, Default, Clone)]
+struct Configuration {
+    ip: String,
+    port: u32,
+    address: String
 }
 
-fn throw_text_file(file_path: &str) -> String {
-    match fs::read_to_string(file_path) {
-        Ok(content) => format!("i{}{}\t{}\t{}\r\n", "text/plain", file_path, content, ""),
-        Err(_) => throw_error("ERROR: File not found!"),
-    }
-}
-
-fn throw_directory(directory_path: &str) -> String {
-    let mut response = String::new();
-    match fs::read_dir(directory_path) {
-        Ok(entries) => {
-            for entry in entries {
-                if let Ok(entry) = entry {
-                    let file_name = entry.file_name().into_string().unwrap();
-                    let file_type = if entry.file_type().unwrap().is_dir() {"1"} else {"0"};
-                    response.push_str(&format!("{}{}\t{}\t{}\r\n", file_type, file_name, file_name, ""));
-                }
-            }
+impl Configuration {
+    fn new() -> Self {
+        Self {
+            ip: "0.0.0.0".to_string(),
+            port: 7070,
+            address: format!("{}:{}", "0.0.0.0", 7070)
         }
-        Err(_) => return throw_error("ERROR: Failed to read directory!"),
     }
-    response
+    fn edit_configuration(&mut self, new_ip: String, new_port: u32) {
+        self.ip = new_ip.clone();
+        self.port = new_port.clone();
+        self.address = format!("{}:{}", new_ip, new_port);
+    }
 }
 
-fn throw_error(message: &str) -> String {
-    format!("3{}\t{}\t{}\r\n", message, "", "")
-}
+#[tokio::main]
+async fn main() {
+    let mut server_conf = Configuration::new();
+    server_conf.edit_configuration("10.0.0.73".to_string(), 7070);
+    println!("INITIALIZING SERVER WITH CONFIGURATION {}:{}", server_conf.ip, server_conf.port);
 
-fn main() {
-    println!("INITIALIZING...");
-    let ip = "10.0.0.234";
-    let port = "7070";
-    let address = format!("{}:{}", ip, port);
-    let listener = TcpListener::bind(address).unwrap();
-    println!("INITIALIZED; SERVER LISTENING ON PORT {} AT IP ADDRESS {}...", port, ip);
+    let tcp_listener = TcpListener::bind(server_conf.address).unwrap();
+    println!("SERVER INITIALIZED, TCP LISTENER CONFIGURED");
+    println!("LISTENING ON PORT {} AT IP ADDRESS {}", server_conf.ip, server_conf.port);
 
-    for stream in listener.incoming() {
+    for stream in tcp_listener.incoming() {
         match stream {
             Ok(stream) => {
-                std::thread::spawn(move || {
-                    handle_client(stream);
-                });
+                handle_client(stream).await;
             }
             Err(e) => {
                 eprintln!("ERROR: {}", e);
@@ -67,4 +48,36 @@ fn main() {
         }
     }
 
+}
+
+async fn handle_client(mut stream: TcpStream) {
+    let mut buf = [0; 512];
+    stream.read(&mut buf).unwrap();
+
+    let client_request = String::from_utf8_lossy(&buf[..]);
+    println!("REQUEST RECEIVED FROM CLIENT! CONTENTS: {}", client_request);
+
+    let response = request_handler(client_request.to_string());
+
+    stream.write_all(response.as_bytes()).unwrap();
+}
+
+fn request_handler(request: String) -> String {
+
+    let response = match request.trim() {
+        _ => throw_gopher("/home/fizbin/lair/projects/rust/mole-node/src/gophermap"),
+    };
+
+    return response
+    
+}
+
+fn throw_gopher(file_path: &str) -> String { // lob a live gopher with a makeshift catapult
+    let content = fs::read_to_string(file_path).unwrap();
+    return content
+}
+
+fn throw_error(message: &str) -> String {
+    let error = format!("ERROR: {}", message);
+    error
 }
