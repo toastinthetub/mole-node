@@ -26,42 +26,10 @@ impl Configuration {
     }
 }
 
-enum GopherType {
-    TextFile, //0
-    Directory, //1
-    NameServer, //2
-    Error, //3
-    MacHQFiller, //4
-    MSBin, //5, windows exe file
-    UnixUnencoded, // 6 unencoded unix file (???)
-    SearchServer, //7, dfk
-    TelnetSesh, //8
-    Bin, //9
-    Gif, //g
-}
-
-impl GopherType {
-    fn to_char(&self) -> char {
-        match *self {
-            GopherType::TextFile => '0',
-            GopherType::Directory => '1',
-            GopherType::NameServer => '2',
-            GopherType::Error => '3',
-            GopherType::MacHQFiller => '4', // i have no fucking clue what this means
-            GopherType::MSBin => '5', // enjoy having ur data sold pleb
-            GopherType::UnixUnencoded => '6', // dont know what these are either
-            GopherType::SearchServer => '7',
-            GopherType::TelnetSesh => '8',
-            GopherType::Bin => '9',
-            GopherType::Gif => 'g',
-        }
-    }
-}
-
 #[tokio::main]
 async fn main() {
     let mut server_conf = Configuration::new();
-    server_conf.edit_configuration("10.11.115.209".to_string(), 7070);
+    server_conf.edit_configuration("10.0.0.73".to_string(), 7070);
     println!("INITIALIZING SERVER WITH CONFIGURATION {}:{}", server_conf.ip, server_conf.port);
 
     // Set the current working directory to the directory containing the file
@@ -105,20 +73,9 @@ async fn handle_client(mut stream: TcpStream) -> std::io::Result<()> {
 
 fn request_handler(request: String) -> String {
     let response = match request.trim() {
-        "" => throw_gopher("./gophermap"), // Assuming 'gophermap' is the file name
-        _ => throw_gopher("")
+        _ => fs::read_to_string("./src/gopher-hole/gophermap")
     };
+    
+    response.unwrap()
 
-    response
-}
-
-fn throw_gopher(file_name: &str) -> String {
-    match fs::read_to_string(file_name) {
-        Ok(content) => content,
-        Err(e) => throw_error(&format!("Failed to read file: {}", e)),
-    }
-}
-
-fn throw_error(message: &str) -> String {
-    format!("ERROR: {}", message)
 }
